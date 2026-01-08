@@ -1,0 +1,32 @@
+<div class="app-container">
+  <header class="navbar">
+    <div class="navbar-content">
+      <h1 class="navbar-brand">Gestión de Productos - SOA</h1>
+      <nav class="navbar-nav">
+        <button 
+          (click)="cambiarComponente('tipos')" 
+          [class.active]="componenteActivo === 'tipos'"
+          class="nav-button"
+        >
+          Tipos de Producto
+        </button>
+        <button 
+          (click)="cambiarComponente('productos')" 
+          [class.active]="componenteActivo === 'productos'"
+          class="nav-button"
+        >
+          Productos
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <app-tipo-producto *ngIf="componenteActivo === 'tipos'"></app-tipo-producto>
+    <app-producto *ngIf="componenteActivo === 'productos'"></app-producto>
+  </main>
+
+  <footer class="footer">
+    <p>&copy; 2026 Gestión de Productos SOA - Laboratorio 2</p>
+  </footer>
+</div>

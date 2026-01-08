@@ -1,0 +1,8 @@
+bin
+obj
+dist
+.git
+.gitignore
+.vscode
+.DS_Store
+*.log

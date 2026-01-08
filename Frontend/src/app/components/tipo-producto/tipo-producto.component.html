@@ -1,0 +1,68 @@
+<div class="container">
+  <h1>Gestión de Tipos de Producto</h1>
+
+  <div class="formulario-section">
+    <h2>{{ editando ? 'Editar' : 'Crear' }} Tipo de Producto</h2>
+    
+    <form (ngSubmit)="guardar()">
+      <div class="form-group">
+        <label for="tipo">Tipo de Producto:</label>
+        <input 
+          type="text" 
+          id="tipo" 
+          name="tipo" 
+          [(ngModel)]="nuevoTipo.tipo"
+          placeholder="Ingrese el tipo de producto"
+          class="form-control"
+        >
+      </div>
+
+      <div class="button-group">
+        <button type="submit" class="btn btn-primary">
+          {{ editando ? 'Actualizar' : 'Crear' }}
+        </button>
+        <button type="button" (click)="limpiarFormulario()" class="btn btn-secondary">
+          Cancelar
+        </button>
+      </div>
+    </form>
+
+    <div *ngIf="mensaje" class="alert alert-info">
+      {{ mensaje }}
+    </div>
+  </div>
+
+  <div class="tabla-section">
+    <h2>Tipos de Producto Registrados</h2>
+    
+    <div *ngIf="cargando" class="loading">
+      Cargando...
+    </div>
+
+    <div *ngIf="!cargando && tiposProducto.length > 0" class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Tipo</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let tipo of tiposProducto">
+            <td>{{ tipo.id }}</td>
+            <td>{{ tipo.tipo }}</td>
+            <td>
+              <button type="button" (click)="editar(tipo)" class="btn btn-edit">Editar</button>
+              <button type="button" (click)="eliminar(tipo.id)" class="btn btn-delete">Eliminar</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div *ngIf="!cargando && tiposProducto.length === 0" class="no-data">
+      No hay tipos de producto registrados
+    </div>
+  </div>
+</div>

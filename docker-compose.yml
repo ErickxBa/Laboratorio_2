@@ -1,0 +1,47 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: producto_soa_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: producto_soa
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - producto_soa_network
+
+  # Backend .NET (Opcional - comentar si lo ejecutas localmente)
+  # backend:
+  #   build:
+  #     context: ./Backend
+  #     dockerfile: Dockerfile
+  #   container_name: producto_soa_backend
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   ports:
+  #     - "5000:5000"
+  #   environment:
+  #     ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=producto_soa;Username=postgres;Password=postgres123;
+  #   networks:
+  #     - producto_soa_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  producto_soa_network:
+    driver: bridge
