@@ -47,6 +47,41 @@ export class TipoProductoService {
     );
   }
 
+  // --- OBTENER POR ID ---
+  obtenerPorId(id: number): Observable<TipoProducto | null> {
+    const body = `
+      <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/">
+        <s:Body>
+          <tem:ObtenerPorId>
+            <tem:id>${id}</tem:id>
+          </tem:ObtenerPorId>
+        </s:Body>
+      </s:Envelope>`;
+
+    return this.soapRequest(body, 'http://tempuri.org/ITipoProductoService/ObtenerPorId').pipe(
+      map(xmlDoc => {
+        const resultNode = this.findNodeByLocalName(xmlDoc, 'ObtenerPorIdResult');
+        if (resultNode && resultNode.childNodes.length > 0) {
+          // Check if result is not nil
+          const isNil = resultNode.getAttribute('i:nil') === 'true' || 
+                        resultNode.getAttributeNS('http://www.w3.org/2001/XMLSchema-instance', 'nil') === 'true';
+          if (isNil) {
+            return null;
+          }
+          return {
+            id: this.getNodeValue(resultNode, 'Id'),
+            tipo: this.getNodeText(resultNode, 'Tipo')
+          };
+        }
+        return null;
+      }),
+      catchError(err => {
+        console.error('Error ObtenerPorId Tipo:', err);
+        return of(null);
+      })
+    );
+  }
+
   // --- CREAR ---
   crear(tipoProducto: TipoProducto): Observable<number> {
     // NOTA: 'tipoProducto' es el nombre del argumento en tu interfaz C#
