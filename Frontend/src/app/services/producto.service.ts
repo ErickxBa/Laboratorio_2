@@ -1,22 +1,21 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Observable, from } from 'rxjs';
-import { map, switchMap } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
 import { Producto } from '../models/producto.model';
 
 @Injectable({
   providedIn: 'root'
 })
 export class ProductoService {
-  // Asegúrate de que este puerto coincida con tu consola (http://localhost:5000)
-  private url = 'http://localhost:5000/Services/ProductoService'; 
+  // URL definida en tu Program.cs para HTTP puerto 5000
+  private url = 'http://localhost:5000/Services/ProductoService';
 
   constructor(private http: HttpClient) { }
 
   // --- MÉTODOS PÚBLICOS ---
 
   obtenerTodos(): Observable<Producto[]> {
-    // 1. Definimos el cuerpo del XML (SOAP Envelope)
     const body = `
       <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
         <s:Body>
@@ -24,16 +23,20 @@ export class ProductoService {
         </s:Body>
       </s:Envelope>`;
 
-    // 2. Enviamos la petición y transformamos el XML de respuesta a JSON
     return this.soapRequest(body, 'http://tempuri.org/IProductoService/ObtenerTodos').pipe(
       map(xmlDoc => {
         const productos: Producto[] = [];
-        const listaNodos = xmlDoc.getElementsByTagName('Producto'); // Busca las etiquetas <Producto>
+        // CoreWCF suele devolver los items dentro de una estructura compleja
+        // Buscamos cualquier etiqueta que se llame 'Producto' o 'ProductoSOA.Models:Producto'
+        const listaNodos = xmlDoc.getElementsByTagNameNS('*', 'Producto'); 
         
-        for (let i = 0; i < listaNodos.length; i++) {
-          const nodo = listaNodos[i];
+        // Si no encuentra por namespace, intenta búsqueda general (fallback)
+        const nodosFinales = listaNodos.length > 0 ? listaNodos : xmlDoc.getElementsByTagName('Producto');
+
+        for (let i = 0; i < nodosFinales.length; i++) {
+          const nodo = nodosFinales[i];
           productos.push({
-            id: this.getNodeValue(nodo, 'Id'), // Asegúrate que coincida con mayúsculas/minúsculas de tu Backend
+            id: this.getNodeValue(nodo, 'Id'),
             idTipo: this.getNodeValue(nodo, 'IdTipo'),
             descripcion: this.getNodeText(nodo, 'Descripcion'),
             valor: this.getNodeValue(nodo, 'Valor'),
@@ -41,11 +44,16 @@ export class ProductoService {
           });
         }
         return productos;
+      }),
+      catchError(err => {
+        console.error('Error SOAP ObtenerTodos:', err);
+        return of([]);
       })
     );
   }
 
   crear(producto: Producto): Observable<number> {
+    // NOTA: El orden alfabético de las propiedades dentro de <producto> es importante en WCF
     const body = `
       <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
         <s:Body>
@@ -63,7 +71,8 @@ export class ProductoService {
 
     return this.soapRequest(body, 'http://tempuri.org/IProductoService/Crear').pipe(
       map(xmlDoc => {
-        const resultado = xmlDoc.getElementsByTagName('CrearResult')[0];
+        // Buscamos la respuesta ignorando el namespace del tag (CrearResult)
+        const resultado = this.findNodeByLocalName(xmlDoc, 'CrearResult');
         return resultado ? parseInt(resultado.textContent || '0', 10) : 0;
       })
     );
@@ -87,7 +96,7 @@ export class ProductoService {
 
     return this.soapRequest(body, 'http://tempuri.org/IProductoService/Actualizar').pipe(
       map(xmlDoc => {
-        const resultado = xmlDoc.getElementsByTagName('ActualizarResult')[0];
+        const resultado = this.findNodeByLocalName(xmlDoc, 'ActualizarResult');
         return resultado ? resultado.textContent === 'true' : false;
       })
     );
@@ -105,13 +114,13 @@ export class ProductoService {
 
     return this.soapRequest(body, 'http://tempuri.org/IProductoService/Eliminar').pipe(
       map(xmlDoc => {
-        const resultado = xmlDoc.getElementsByTagName('EliminarResult')[0];
+        const resultado = this.findNodeByLocalName(xmlDoc, 'EliminarResult');
         return resultado ? resultado.textContent === 'true' : false;
       })
     );
   }
 
-  // --- MÉTODOS PRIVADOS (CORE DE LA COMUNICACIÓN SOAP) ---
+  // --- MÉTODOS PRIVADOS ---
 
   private soapRequest(body: string, soapAction: string): Observable<XMLDocument> {
     const headers = new HttpHeaders({
@@ -119,36 +128,32 @@ export class ProductoService {
       'SOAPAction': soapAction
     });
 
-    // Enviamos request como texto (responseType: 'text') porque Angular espera JSON por defecto
     return this.http.post(this.url, body, { headers, responseType: 'text' }).pipe(
       map(responseString => {
-        // Parseamos el string XML a un objeto DOM manipulable
         const parser = new DOMParser();
         return parser.parseFromString(responseString, 'text/xml');
       })
     );
   }
 
-  // Ayudante para extraer valores numéricos del XML
-  private getNodeValue(parent: Element, tagName: string): number {
-    // Nota: A veces los tags vienen con prefijos (ej: a:Id), buscamos por nombre local o tag completo
-    const node = parent.getElementsByTagName('*');
-    for(let i=0; i<node.length; i++) {
-        if (node[i].localName === tagName) {
-            return parseFloat(node[i].textContent || '0');
-        }
+  // Busca un nodo ignorando el prefijo (ej: encuentra 'Id' aunque venga como 'a:Id')
+  private findNodeByLocalName(parent: Document | Element, localName: string): Element | null {
+    const allElements = parent.getElementsByTagName('*');
+    for (let i = 0; i < allElements.length; i++) {
+      if (allElements[i].localName === localName) {
+        return allElements[i];
+      }
     }
-    return 0;
+    return null;
   }
 
-  // Ayudante para extraer texto del XML
+  private getNodeValue(parent: Element, tagName: string): number {
+    const node = this.findNodeByLocalName(parent, tagName);
+    return node ? parseFloat(node.textContent || '0') : 0;
+  }
+
   private getNodeText(parent: Element, tagName: string): string {
-    const node = parent.getElementsByTagName('*');
-    for(let i=0; i<node.length; i++) {
-        if (node[i].localName === tagName) {
-            return node[i].textContent || '';
-        }
-    }
-    return '';
+    const node = this.findNodeByLocalName(parent, tagName);
+    return node ? (node.textContent || '') : '';
   }
 }
