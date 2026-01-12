@@ -8,27 +8,31 @@ import { TipoProducto } from '../models/tipo-producto.model';
   providedIn: 'root'
 })
 export class TipoProductoService {
-  // Asegúrate de que el puerto sea el correcto (5000)
-  private soapEndpoint = 'http://localhost:5000/Services/TipoProductoService';
+  // 1. URL Correcta (Puerto 5000 HTTP)
+  private url = 'http://localhost:5000/Services/TipoProductoService';
   
-  // Namespace del Modelo en C# (Revisa que coincida con tu backend, carpeta Models)
-  private modelNamespace = 'http://schemas.datacontract.org/2004/07/ProductoSOA.Models';
+  // 2. Namespace de tus Modelos (Debe coincidir con C#)
+  private modelNs = 'http://schemas.datacontract.org/2004/07/ProductoSOA.Models';
 
   constructor(private http: HttpClient) { }
 
+  // --- OBTENER TODOS ---
   obtenerTodos(): Observable<TipoProducto[]> {
     const body = `
-      <tip:ObtenerTodos />
-    `;
+      <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+        <s:Body>
+          <ObtenerTodos xmlns="http://tempuri.org/" />
+        </s:Body>
+      </s:Envelope>`;
 
-    return this.makeSoapRequest('ObtenerTodos', body).pipe(
+    return this.soapRequest(body, 'http://tempuri.org/ITipoProductoService/ObtenerTodos').pipe(
       map(xmlDoc => {
         const tipos: TipoProducto[] = [];
-        // Buscamos todas las etiquetas 'TipoProducto' independientemente del namespace
-        const listaNodos = xmlDoc.getElementsByTagName('TipoProducto');
+        // Buscamos nodos ignorando el namespace para mayor seguridad
+        const items = this.getElementsByTagNameLocal(xmlDoc, 'TipoProducto');
         
-        for (let i = 0; i < listaNodos.length; i++) {
-          const nodo = listaNodos[i];
+        for (let i = 0; i < items.length; i++) {
+          const nodo = items[i];
           tipos.push({
             id: this.getNodeValue(nodo, 'Id'),
             tipo: this.getNodeText(nodo, 'Tipo')
@@ -36,134 +40,117 @@ export class TipoProductoService {
         }
         return tipos;
       }),
-      catchError(error => {
-        console.error('Error al obtener tipos:', error);
+      catchError(err => {
+        console.error('Error ObtenerTodos Tipos:', err);
         return of([]);
       })
     );
   }
 
-  obtenerPorId(id: number): Observable<TipoProducto | null> {
-    const body = `<tip:id>${id}</tip:id>`;
-
-    return this.makeSoapRequest('ObtenerPorId', body).pipe(
-      map(xmlDoc => {
-        const nodo = xmlDoc.getElementsByTagName('ObtenerPorIdResult')[0];
-        if (nodo && nodo.childNodes.length > 0) {
-           // A veces el resultado viene directo o dentro de un wrapper, buscamos hijos
-           // Si el resultado es nulo, WCF suele enviar tag vacío o nil
-           return {
-             id: this.getNodeValue(xmlDoc.documentElement, 'Id'), // Buscamos en todo el doc por seguridad
-             tipo: this.getNodeText(xmlDoc.documentElement, 'Tipo')
-           };
-        }
-        return null;
-      }),
-      catchError(() => of(null))
-    );
-  }
-
+  // --- CREAR ---
   crear(tipoProducto: TipoProducto): Observable<number> {
-    // IMPORTANTE: Definimos el objeto con el namespace 'a' (DataContract)
+    // NOTA: 'tipoProducto' es el nombre del argumento en tu interfaz C#
+    // 'a' es el prefijo para las propiedades del modelo (ProductoSOA.Models)
     const body = `
-      <tip:tipoProducto xmlns:a="${this.modelNamespace}" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-        <a:Id>0</a:Id>
-        <a:Tipo>${this.escapeXml(tipoProducto.tipo)}</a:Tipo>
-      </tip:tipoProducto>
-    `;
+      <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/" xmlns:a="${this.modelNs}">
+        <s:Body>
+          <tem:Crear>
+            <tem:tipoProducto>
+              <a:Id>0</a:Id>
+              <a:Tipo>${this.escapeXml(tipoProducto.tipo)}</a:Tipo>
+            </tem:tipoProducto>
+          </tem:Crear>
+        </s:Body>
+      </s:Envelope>`;
 
-    return this.makeSoapRequest('Crear', body).pipe(
+    return this.soapRequest(body, 'http://tempuri.org/ITipoProductoService/Crear').pipe(
       map(xmlDoc => {
-        const resultado = xmlDoc.getElementsByTagName('CrearResult')[0];
-        return resultado ? parseInt(resultado.textContent || '0', 10) : 0;
-      }),
-      catchError(error => {
-        console.error('Error al crear:', error);
-        return of(0);
+        const resultNode = this.findNodeByLocalName(xmlDoc, 'CrearResult');
+        return resultNode ? parseInt(resultNode.textContent || '0', 10) : 0;
       })
     );
   }
 
+  // --- ACTUALIZAR ---
   actualizar(tipoProducto: TipoProducto): Observable<boolean> {
     const body = `
-      <tip:tipoProducto xmlns:a="${this.modelNamespace}" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
-        <a:Id>${tipoProducto.id}</a:Id>
-        <a:Tipo>${this.escapeXml(tipoProducto.tipo)}</a:Tipo>
-      </tip:tipoProducto>
-    `;
+      <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/" xmlns:a="${this.modelNs}">
+        <s:Body>
+          <tem:Actualizar>
+            <tem:tipoProducto>
+              <a:Id>${tipoProducto.id}</a:Id>
+              <a:Tipo>${this.escapeXml(tipoProducto.tipo)}</a:Tipo>
+            </tem:tipoProducto>
+          </tem:Actualizar>
+        </s:Body>
+      </s:Envelope>`;
 
-    return this.makeSoapRequest('Actualizar', body).pipe(
+    return this.soapRequest(body, 'http://tempuri.org/ITipoProductoService/Actualizar').pipe(
       map(xmlDoc => {
-        const resultado = xmlDoc.getElementsByTagName('ActualizarResult')[0];
-        return resultado ? resultado.textContent === 'true' : false;
-      }),
-      catchError(error => {
-        console.error('Error al actualizar:', error);
-        return of(false);
+        const resultNode = this.findNodeByLocalName(xmlDoc, 'ActualizarResult');
+        return resultNode ? resultNode.textContent === 'true' : false;
       })
     );
   }
 
+  // --- ELIMINAR ---
   eliminar(id: number): Observable<boolean> {
-    const body = `<tip:id>${id}</tip:id>`;
+    const body = `
+      <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/">
+        <s:Body>
+          <tem:Eliminar>
+            <tem:id>${id}</tem:id>
+          </tem:Eliminar>
+        </s:Body>
+      </s:Envelope>`;
 
-    return this.makeSoapRequest('Eliminar', body).pipe(
+    return this.soapRequest(body, 'http://tempuri.org/ITipoProductoService/Eliminar').pipe(
       map(xmlDoc => {
-        const resultado = xmlDoc.getElementsByTagName('EliminarResult')[0];
-        return resultado ? resultado.textContent === 'true' : false;
-      }),
-      catchError(error => {
-        console.error('Error al eliminar:', error);
-        return of(false);
+        const resultNode = this.findNodeByLocalName(xmlDoc, 'EliminarResult');
+        return resultNode ? resultNode.textContent === 'true' : false;
       })
     );
   }
 
-  // --- HELPERS PRIVADOS ---
+  // --- HELPERS CORE ---
 
-  private makeSoapRequest(action: string, bodyContent: string): Observable<XMLDocument> {
-    const soapEnvelope = `
-      <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tip="http://tempuri.org/">
-        <soap:Body>
-          <tip:${action}>
-            ${bodyContent}
-          </tip:${action}>
-        </soap:Body>
-      </soap:Envelope>
-    `;
-
+  private soapRequest(body: string, action: string): Observable<XMLDocument> {
     const headers = new HttpHeaders({
       'Content-Type': 'text/xml; charset=utf-8',
-      'SOAPAction': `http://tempuri.org/ITipoProductoService/${action}`
+      'SOAPAction': action
     });
 
-    return this.http.post(this.soapEndpoint, soapEnvelope, { 
-      headers, 
-      responseType: 'text' 
-    }).pipe(
+    return this.http.post(this.url, body, { headers, responseType: 'text' }).pipe(
       map(responseString => new DOMParser().parseFromString(responseString, 'text/xml'))
     );
   }
 
-  private getNodeValue(parent: Element | Document, tagName: string): number {
-    const elements = parent.getElementsByTagName('*');
-    for (let i = 0; i < elements.length; i++) {
-      // Comparamos localName para ignorar prefijos como "a:Id" o "b:Id"
-      if (elements[i].localName === tagName) {
-        return parseInt(elements[i].textContent || '0', 10);
-      }
+  // Busca elementos ignorando el prefijo del namespace (ej: encuentra a:Id buscando solo "Id")
+  private findNodeByLocalName(parent: Document | Element, localName: string): Element | null {
+    const all = parent.getElementsByTagName('*');
+    for (let i = 0; i < all.length; i++) {
+      if (all[i].localName === localName) return all[i];
     }
-    return 0;
+    return null;
   }
 
-  private getNodeText(parent: Element | Document, tagName: string): string {
-    const elements = parent.getElementsByTagName('*');
-    for (let i = 0; i < elements.length; i++) {
-      if (elements[i].localName === tagName) {
-        return elements[i].textContent || '';
-      }
+  private getElementsByTagNameLocal(parent: Document | Element, localName: string): Element[] {
+    const result: Element[] = [];
+    const all = parent.getElementsByTagName('*');
+    for (let i = 0; i < all.length; i++) {
+      if (all[i].localName === localName) result.push(all[i]);
     }
-    return '';
+    return result;
+  }
+
+  private getNodeValue(parent: Element, tagName: string): number {
+    const node = this.findNodeByLocalName(parent, tagName);
+    return node ? parseFloat(node.textContent || '0') : 0;
+  }
+
+  private getNodeText(parent: Element, tagName: string): string {
+    const node = this.findNodeByLocalName(parent, tagName);
+    return node ? (node.textContent || '') : '';
   }
 
   private escapeXml(unsafe: string): string {
